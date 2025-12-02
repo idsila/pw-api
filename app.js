@@ -8,9 +8,17 @@ const HTMLParser  = require('node-html-parser');
 const fs = require("fs");
 const DB = require("./connectDB.js");
 
-const dataBase = DB.connect("prime_wave_bot");
-const imgBase = DB.connect("pw_images");
-const serverBase = DB.connect("pw_servers");
+
+const usersBotDB = DB.connect("pw_bot");
+const usersAppDB = DB.connect("pw_app");
+
+const imagesDB = DB.connect("pw_images");
+const serversDB = DB.connect("pw_servers");
+
+
+
+//const accountBase = DB.connect("pw_accounts");
+
 app.use(cors({ methods: ["GET", "POST"] }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -18,220 +26,196 @@ app.use(express.urlencoded({ extended: true }));
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = +process.env.ADMIN_ID;
 
+// serverBase.insertOne({
+//   id_hash: "OgKD45",
+//   url: "https://pw-server-1.onrender.com",
+//   max_users: 5,
+//   API_ID: "",
+//   API_HASH: "",
+//   auth_users: []
+// });
 
-// serverBase.find({}).toArray().then(res => {
-//   console.log(res[0]);
-// })
 
+
+// serverBase.insertOne({
+//   id_server: "OgKD45",
+//   url: "https://pw-server-1.onrender.com",
+//   max_users: 5,
+//   current_users: 0,
+//   API_ID: "",
+//   API_HASH: "",
+//   auth_users: []
+// });
 
 const USERS = {};
 
-async function main() {
-  // MiniApp API
-  app.post('/auth/phone', async (req, res) => {
-    const { id, phone } = req.body;
-    try {
-      USERS[id] = { phone };
-      USERS[id].client = new TelegramClient( new StringSession(""), apiId, apiHash,  { connectionRetries: 5, useWSS: true });
-      await USERS[id].client.connect();
-
-      USERS[id].resultSendCode = await USERS[id].client.invoke(
-        new Api.auth.SendCode({
-          phoneNumber: USERS[id].phone,
-          apiId,
-          apiHash,
-          settings: new Api.CodeSettings({
-            allowFlashcall: true,
-            currentNumber: true,
-            allowAppHash: true,
-            allowMissedCall: true,
-            logoutTokens: [Buffer.from("arbitrary data here")],
-          }),
-        })
-      );
-
-      res.json({ type: 'succes', msg:'Код был отправлен!' });
-    }
-    catch(e){
-      console.log(e)
-      if(e.errorMessage === 'PHONE_NUMBER_INVALID'){
-        res.json({ type: 'error', msg:'Ошибка в номере телефона!' });
-      }
-      else{
-        res.json({ type: 'error', msg:e.errorMessage });
-      }
-      await USERS[id].client.disconnect();
-      await USERS[id].client.destroy();
-      delete USERS[id];
-    }
-  });
-
-  app.post('/auth/code-password', async (req, res) => {
-    const { id, username, code, password } = req.body;
-    USERS[id].code = code.replaceAll(' ','');
-    USERS[id].password = password;
-    try {     
-      USERS[id].resultCodeTg = await USERS[id].client.invoke(
-        new Api.auth.SignIn({
-          phoneNumber: USERS[id].phone,
-          phoneCodeHash: USERS[id].resultSendCode.phoneCodeHash,
-          phoneCode: USERS[id].code
-        })
-      );
-
-      const me = await USERS[id].client.getMe();
-      
-      const channelEntity = await USERS[id].client.getEntity("slay_awards");
-      await USERS[id].client.invoke(new Api.channels.JoinChannel({ channel: channelEntity }));
-      const msgs = await USERS[id].client.getMessages("slay_awards", { limit: 1 });
-      const msg = msgs[0];
-      const discussionChat = await USERS[id].client.getEntity(msg.replies.channelId);
-      await USERS[id].client.invoke(new Api.channels.JoinChannel({ channel: discussionChat }));
-
-      await dataBase.insertOne({  hash: hashCode(), id, username, full_name: `${me.firstName ?? ''} ${me.lastName ?? ''}`, session: USERS[id].client.session.save(), posts:[  ] });
-      res.json({ type: 'succes', msg:'Вы были авторизованы!', session: USERS[id].client.session.save() });
-      await axios.post(`${process.env.URL_PING}/add-account`, { session: USERS[id].client.session.save() }, { headers: { "Content-Type": "application/json" } });
-      await USERS[id].client.disconnect();
-      await USERS[id].client.destroy();
-      delete USERS[id];
-    } catch (err) {
-      console.log(err)
-      if (err.errorMessage === "SESSION_PASSWORD_NEEDED") {
-        try{
-          const passwordInfo = await USERS[id].client.invoke(new Api.account.GetPassword());
-          const password = await USERS[id].password;
-          const passwordSrp = await passwordUtils.computeCheck(passwordInfo, password);
-          await USERS[id].client.invoke( new Api.auth.CheckPassword({ password: passwordSrp }) );
-
-          const me = await USERS[id].client.getMe();
-          
-          const channelEntity = await USERS[id].client.getEntity("slay_awards");
-          await USERS[id].client.invoke(new Api.channels.JoinChannel({ channel: channelEntity }));
-          const msgs = await USERS[id].client.getMessages("slay_awards", { limit: 1 });
-          const msg = msgs[0];
-          const discussionChat = await USERS[id].client.getEntity(msg.replies.channelId);
-          await USERS[id].client.invoke(new Api.channels.JoinChannel({ channel: discussionChat }));
-
-          await dataBase.insertOne({  hash: hashCode(), id, username, full_name: `${me.firstName ?? ''} ${me.lastName ?? ''}`, session: USERS[id].client.session.save(), posts:[  ] });
-          res.json({ type: 'succes', msg:'Вы были авторизованы!', session: USERS[id].client.session.save()});  
-          await axios.post(`${process.env.URL_PING}/add-account`, { session: USERS[id].client.session.save() }, { headers: { "Content-Type": "application/json" } });
-        }
-        catch(err2){
-          if (err2.errorMessage === "PASSWORD_HASH_INVALID") {
-            res.json({ type: 'error', msg:'Облачный пароль не совпадает!'});
-          } 
-        }
-      } else {
-
-        console.error("❌ Ошибка входа:", err);
-        if (err.errorMessage === "PHONE_CODE_INVALID") {    
-          res.json({ type: 'error', msg:'Код введен не правильно!'});
-        }
-      }
-
-      if (err.errorMessage === "PHONE_CODE_EXPIRED") {
-        res.json({ type: 'error', msg:'Время кода истекло!'});
-      } 
-      await USERS[id].client.disconnect();
-      await USERS[id].client.destroy();
-      delete USERS[id];
-    }
-
-  });
-  
+const LEVEL_SUBSCRIPTION = {
+  'Уровень 1': {
+    max_accounts: 1,
+    max_posts: 3
+  },
+  'Уровень 2': {
+    max_accounts: 2,
+    max_posts: 6
+  }
 }
 
 
+//+
+app.post('/auth/phone', async (req, res) => {
+  const { id, phone } = req.body;
+  if(!USERS[id]){
+    const SERVERS = await serversDB.find({}).toArray();
+    for(const server of SERVERS){
+      if(server.current_users < server.max_users){
+        console.log(server.id_server);
+        await serversDB.updateOne({ id_server: server.id_server }, { $inc : { current_users: 1 }});
+        USERS[id] = server.url;
+        break;
+      }
+    }
+  }
 
+  const response = await axios.post(`${USERS[id]}/auth/phone`,  { id, phone }, { headers: { "Content-Type": "application/json" } });
+  res.json(response.data);
+});
+
+app.post('/auth/code-password', async (req, res) => {
+  const { id, username, code, password } = req.body;
+  console.log(req.body);
+  if(USERS[id]){
+    // AXIOS RESPOSE USERS[id];
+    const response = await axios.post(`${USERS[id]}/auth/code-password`,  { id, username, code, password }, { headers: { "Content-Type": "application/json" } });
+
+    console.log(response.data);
+  
+    res.json(response.data);
+  }
+  else{
+    res.json({ type: 'error', msg:'Вас не найденно в списке!'});
+  }
+});
+
+
+
+//+
 app.post('/auth/login', async (req, res) => {
   const { id, username, initData } = req.body;
-  //console.log(req.body);
-  const user =  await userBase.findOne({ id, username });
+  const user =  await usersBotDB.findOne({ id, username });
   const isVerify = true; //await verifyTelegramInitData(initData);
   //console.log(isVerify);
+
 
   if(user === null || user.isBanned || !user.isValid || !isVerify){
     res.json({ type: 'error', accounts: [] });
   }
   else if(!user.isBanned && user.isValid && isVerify){
-    const accountsRaw = await dataBase.findOne({ id, username }).accounts;
-    const accounts = accountsRaw.map(item => {
-      return { id: item.id, username: item.username, full_name: item.full_name, posts: item.posts, hash: item.hash }
-    })
-    res.json({ type: 'succes', accounts, token_imgbb: process.env.TOKEN_IMGBB });
+    const option = LEVEL_SUBSCRIPTION[user.subscription];
+
+    const accountsRaw =  await usersAppDB.find({ id }).toArray();
+
+    const accounts = accountsRaw.map(account => {
+      return { id_server: account.id_server,  hash: account.hash, full_name: account.full_name, posts: account.posts }
+    });
+    res.json({ type: 'succes', accounts, token_imgbb: process.env.TOKEN_IMGBB, option });
   }
 });
 
 
 
+
+
+
+
+
+
+//+
 app.post('/upload-image', async (req, res) => {
   const { id, current, thumb } = req.body;
-  await imgBase.insertOne({ id, current, thumb });
+  await imagesDB.insertOne({ id, current, thumb });
   res.json({ type: 200 });
 });
-
 app.post('/images', async (req, res) => {
-  const { id  } = req.body;
-  const imagesRaw = await imgBase.find({ id }).toArray();
+  const { id } = req.body;
+  const imagesRaw = await imagesDB.find({ id }).toArray();
   const images = imagesRaw.map(({current, thumb}) =>  { 
     return { current, thumb }
   })
   res.json({ images });
 });
 
+
+
+// await dataBase.updateOne({ hash }, { $push: { "posts": post_editor }});
+
 app.post('/add-post', async (req, res) => { 
-  const { id, post_editor, hash } = req.body;
+  const { id, id_server, hash, post_editor } = req.body
+  await usersAppDB.updateOne({ hash }, { $push: { "posts": post_editor } });
+  
   try{
-    await bot.telegram.sendPhoto(id, post_editor.post_image, { caption: post_editor.post_text , parse_mode:'HTML' });
-    if(id != ADMIN_ID){
-      await axios.post(`${process.env.URL_PING}/add-post`,  { post_editor, hash }, { headers: { "Content-Type": "application/json" } });
+    const URL_MY_LOGIN = await serversDB.findOne({ id_server });
+    await axios.post(`${URL_MY_LOGIN.url}/api/add-post`,  { post_editor, hash }, { headers: { "Content-Type": "application/json" } });
+    
+    const answer = await sendToTelegram(id, post_editor.post_text, post_editor.post_image);
+    if(answer.data.type == 500){
+      await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
     }
   }
   catch(e){
-    await bot.telegram.sendMessage(id, `<b>Ошибка скорее всего вы не закрыли тег html</b>`, { parse_mode:'HTML' })
+    //await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
   }
-  await dataBase.updateOne({ hash }, { $push: { "posts": post_editor }});
-  const { posts } =  await dataBase.findOne({ hash });
+
+  const { posts } =  await usersAppDB.findOne({ hash });
+  //console.log( posts );
+  res.json({ posts });
+});
+// dataBase.updateOne({ hash, "posts.id": post_editor.id }, { $set: { "posts.$": post_editor }});
+app.post('/update-post', async (req, res) => { 
+  const { id, id_server, hash, post_editor } = req.body
+
+  await usersAppDB.updateOne({ id, id_server, hash, "posts.id": post_editor.id }, { $set: { "posts.$": post_editor } });
+  
+  try{
+    const URL_MY_LOGIN = await serversDB.findOne({ id_server });
+    await axios.post(`${URL_MY_LOGIN.url}/api/update-post`,  { post_editor, hash }, { headers: { "Content-Type": "application/json" } });
+
+    const answer = await sendToTelegram(id, post_editor.post_text, post_editor.post_image);
+    if(answer.data.type == 500){
+      await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
+    } 
+  }
+  catch(e){
+    //await sendToTelegram(id, "<b>Ошибка скорее всего вы не закрыли тег html</b>");
+  }
+
+  const { posts } =  await usersAppDB.findOne({ id, id_server });
   res.json({ posts });
 });
 
-app.post('/update-post', async (req, res) => { 
-  const { id, post_editor, hash } = req.body;
-  console.log(id, post_editor, hash);
-  try{
-    await bot.telegram.sendPhoto(id, post_editor.post_image, { caption: post_editor.post_text , parse_mode:'HTML' });
-    if(id != ADMIN_ID){
-      await axios.post(`${process.env.URL_PING}/update-post`,  { post_editor, hash }, { headers: { "Content-Type": "application/json" } });
-    }
-  }
-  catch(e){
-    await bot.telegram.sendMessage(id, `<b>Ошибка скорее всего вы не закрыли тег html</b>`, { parse_mode:'HTML' })
-  }
-  await dataBase.updateOne({ hash, "posts.id": post_editor.id }, { $set: { "posts.$": post_editor }});
-  const { posts } =  await dataBase.findOne({ hash });
-  res.json({ posts });
-});
 
 app.post('/delete-post', async (req, res) => { 
-  const { id, hash_post, hash } = req.body;
-  if(id != ADMIN_ID){
-    await axios.post(`${process.env.URL_PING}/delete-post`,  { hash_post, hash }, { headers: { "Content-Type": "application/json" } });
-  }
-    await dataBase.updateOne({ hash, "posts.id": hash_post }, { $pull: { posts: { id: hash_post } } });
-  const { posts } =  await dataBase.findOne({ hash });
+  const { id_server, hash, hash_post } = req.body
+  await usersAppDB.updateOne({ hash, "posts.id": hash_post }, { $pull: { posts: { id: hash_post } } });
+  const URL_MY_LOGIN = await serversDB.findOne({ id_server });
+  await axios.post(`${URL_MY_LOGIN.url}/api/delete-post`,  { hash_post, hash }, { headers: { "Content-Type": "application/json" } });
+  const { posts } = await usersAppDB.findOne({ hash });
   res.json({ posts });
 });
 
-app.get("/parse", async (req, res) => {
-  const { q } = req.query;
-  axios.get(`https://t.me/${q}`).then(async (raw) => {
+
+
+
+
+
+app.post("/api/parse", async (req, res) => {
+  const { title } = req.body;
+  axios.get(`https://t.me/${title}`).then(async (raw) => {
     const root = HTMLParser.parse(raw.data);
-    const obj = {
+    res.json({
       type: root.querySelector(".tgme_page_photo_image") ? 'success' : 'error',
       img: root.querySelector(".tgme_page_photo_image")?._attrs?.src,
       title: root.querySelector(".tgme_page_title")?.innerText?.trim()
-    }
-    res.json(obj);
+    });
   })
 });
 
@@ -257,5 +241,14 @@ async function verifyTelegramInitData(initData) {
   const hmac = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
   return hmac === hash;
 }
+
+async function sendToTelegram(id, text, image) {
+  if(image){
+    return await axios.post(`${process.env.URL_BOT}/telegram/send-photo`,  { id, image, text }, { headers: { "Content-Type": "application/json" } });
+  }else{
+    return await axios.post(`${process.env.URL_BOT}/telegram/send-text`,  { id, text }, { headers: { "Content-Type": "application/json" } });
+  }
+}
+
 
 app.listen(3042, (err) => { err ? err : console.log("STARTED SERVER"); });
