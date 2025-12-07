@@ -51,10 +51,12 @@ const USERS = {};
 
 const LEVEL_SUBSCRIPTION = {
   'Уровень 1': {
-    max_accounts: 1,
+    title: 'Уровень 1',
+    max_accounts: 3,
     max_posts: 3
   },
   'Уровень 2': {
+    title: 'Уровень 2',
     max_accounts: 2,
     max_posts: 6
   }
@@ -63,7 +65,7 @@ const LEVEL_SUBSCRIPTION = {
 
 //+
 app.post('/auth/phone', async (req, res) => {
-  const { id, phone } = req.body;
+  const { id, phone, api_id, api_hash } = req.body;
   if(!USERS[id]){
     const SERVERS = await serversDB.find({}).toArray();
     for(const server of SERVERS){
@@ -76,7 +78,8 @@ app.post('/auth/phone', async (req, res) => {
     }
   }
 
-  const response = await axios.post(`${USERS[id]}/auth/phone`,  { id, phone }, { headers: { "Content-Type": "application/json" } });
+  console.log(USERS[id]);
+  const response = await axios.post(`${USERS[id]}/auth/phone`,  { id, phone, api_id, api_hash }, { headers: { "Content-Type": "application/json" } });
   res.json(response.data);
 });
 
@@ -195,11 +198,17 @@ app.post('/update-post', async (req, res) => {
 
 app.post('/delete-post', async (req, res) => { 
   const { id_server, hash, hash_post } = req.body
-  await usersAppDB.updateOne({ hash, "posts.id": hash_post }, { $pull: { posts: { id: hash_post } } });
-  const URL_MY_LOGIN = await serversDB.findOne({ id_server });
-  await axios.post(`${URL_MY_LOGIN.url}/api/delete-post`,  { hash_post, hash }, { headers: { "Content-Type": "application/json" } });
-  const { posts } = await usersAppDB.findOne({ hash });
-  res.json({ posts });
+  try{
+    await usersAppDB.updateOne({ hash, "posts.id": hash_post }, { $pull: { posts: { id: hash_post } } });
+    const URL_MY_LOGIN = await serversDB.findOne({ id_server });
+    await axios.post(`${URL_MY_LOGIN.url}/api/delete-post`,  { hash_post, hash }, { headers: { "Content-Type": "application/json" } });
+    const { posts } = await usersAppDB.findOne({ hash });
+    res.json({ posts });
+  }
+  catch(e){
+    console.log(e);
+    res.json({ posts:[] });
+  }
 });
 
 
@@ -243,6 +252,7 @@ async function verifyTelegramInitData(initData) {
 }
 
 async function sendToTelegram(id, text, image) {
+  console.log(id, text, image);
   if(image){
     return await axios.post(`${process.env.URL_BOT}/telegram/send-photo`,  { id, image, text }, { headers: { "Content-Type": "application/json" } });
   }else{
