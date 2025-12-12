@@ -5,7 +5,6 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const HTMLParser  = require('node-html-parser');
-const fs = require("fs");
 const DB = require("./connectDB.js");
 
 
@@ -14,10 +13,9 @@ const usersAppDB = DB.connect("pw_app");
 
 const imagesDB = DB.connect("pw_images");
 const serversDB = DB.connect("pw_servers");
+const subsBase = DB.connect('pw_subscription');
 
 
-
-//const accountBase = DB.connect("pw_accounts");
 
 app.use(cors({ methods: ["GET", "POST"] }));
 app.use(express.json());
@@ -26,80 +24,71 @@ app.use(express.urlencoded({ extended: true }));
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = +process.env.ADMIN_ID;
 
-// serverBase.insertOne({
-//   id_hash: "OgKD45",
-//   url: "https://pw-server-1.onrender.com",
+// serversDB.insertOne({
+//   id_server: "P5g3n6",
+//   url: "http://localhost:3056",
 //   max_users: 5,
+//   current_users:0,
 //   API_ID: "",
 //   API_HASH: "",
-//   auth_users: []
 // });
 
 
 
-// serverBase.insertOne({
-//   id_server: "OgKD45",
-//   url: "https://pw-server-1.onrender.com",
-//   max_users: 5,
-//   current_users: 0,
-//   API_ID: "",
-//   API_HASH: "",
-//   auth_users: []
-// });
 
 const USERS = {};
 
-const LEVEL_SUBSCRIPTION = {
-  'Уровень 1': {
-    title: 'Уровень 1',
-    max_accounts: 3,
-    max_posts: 3
-  },
-  'Уровень 2': {
-    title: 'Уровень 2',
-    max_accounts: 2,
-    max_posts: 6
-  }
+
+const LEVEL_SUBSCRIPTION = { };
+
+
+async function updateSubs(){
+  const res = await subsBase.find({}).toArray();
+  res.forEach((item) => {
+    LEVEL_SUBSCRIPTION[item.title] = item;
+  });
 }
+updateSubs();
+
 
 
 //+
 app.post('/auth/phone', async (req, res) => {
   const { id, phone, api_id, api_hash } = req.body;
+
   if(!USERS[id]){
-    const SERVERS = await serversDB.find({}).toArray();
+    const type = api_id ?  'user_api' : 'server_api';
+    const SERVERS = await serversDB.find({ type }).toArray();
     for(const server of SERVERS){
       if(server.current_users < server.max_users){
-        console.log(server.id_server);
+        //console.log(server.id_server);
         await serversDB.updateOne({ id_server: server.id_server }, { $inc : { current_users: 1 }});
         USERS[id] = server.url;
         break;
       }
     }
   }
-
-  console.log(USERS[id]);
+  // console.log(USERS[id]);
+  // console.log('___________________');
   const response = await axios.post(`${USERS[id]}/auth/phone`,  { id, phone, api_id, api_hash }, { headers: { "Content-Type": "application/json" } });
+  // response.data
   res.json(response.data);
 });
 
 app.post('/auth/code-password', async (req, res) => {
   const { id, username, code, password } = req.body;
-  console.log(req.body);
   if(USERS[id]){
-    // AXIOS RESPOSE USERS[id];
     const response = await axios.post(`${USERS[id]}/auth/code-password`,  { id, username, code, password }, { headers: { "Content-Type": "application/json" } });
-
-    console.log(response.data);
-  
+    if(response.data?.type == 'succes'){
+      //console.log(response.data.type);
+      delete USERS[id]
+    }
     res.json(response.data);
   }
   else{
     res.json({ type: 'error', msg:'Вас не найденно в списке!'});
   }
 });
-
-
 
 //+
 app.post('/auth/login', async (req, res) => {
@@ -128,10 +117,6 @@ app.post('/auth/login', async (req, res) => {
 
 
 
-
-
-
-
 //+
 app.post('/upload-image', async (req, res) => {
   const { id, current, thumb } = req.body;
@@ -149,7 +134,6 @@ app.post('/images', async (req, res) => {
 
 
 
-// await dataBase.updateOne({ hash }, { $push: { "posts": post_editor }});
 
 app.post('/add-post', async (req, res) => { 
   const { id, id_server, hash, post_editor } = req.body
@@ -172,7 +156,7 @@ app.post('/add-post', async (req, res) => {
   //console.log( posts );
   res.json({ posts });
 });
-// dataBase.updateOne({ hash, "posts.id": post_editor.id }, { $set: { "posts.$": post_editor }});
+
 app.post('/update-post', async (req, res) => { 
   const { id, id_server, hash, post_editor } = req.body
 
