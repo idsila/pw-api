@@ -98,10 +98,10 @@ app.post('/auth/login', async (req, res) => {
   //console.log(isVerify);
 
 
-  if(user === null || user.isBanned || !user.isValid || !isVerify){
+  if(user === null || user.isBanned || !user.isValid || !isVerify || !user.subscription || !user.activation_sub){
     res.json({ type: 'error', accounts: [] });
   }
-  else if(!user.isBanned && user.isValid && isVerify){
+  else if(!user.isBanned && user.isValid && isVerify && user.subscription && user.activation_sub){
     const option = LEVEL_SUBSCRIPTION[user.subscription];
 
     const accountsRaw =  await usersAppDB.find({ id }).toArray();
