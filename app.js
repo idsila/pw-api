@@ -6,6 +6,7 @@ const cors = require("cors");
 const app = express();
 const HTMLParser  = require('node-html-parser');
 const DB = require("./connectDB.js");
+const { coreObjects } = require("telegram/tl/core/index.js");
 
 
 const usersBotDB = DB.connect("pw_bot");
@@ -116,7 +117,6 @@ app.post('/auth/login', async (req, res) => {
 
 
 
-
 //+
 app.post('/upload-image', async (req, res) => {
   const { id, current, thumb } = req.body;
@@ -133,10 +133,23 @@ app.post('/images', async (req, res) => {
 });
 
 
+// isFreez
 
-
-app.post('/add-post', async (req, res) => { 
+app.post('/add-post', async (req, res) => {
   const { id, id_server, hash, post_editor } = req.body
+
+  const USER =  await usersBotDB.findOne({ id });
+  const OPTION = LEVEL_SUBSCRIPTION[USER.subscription];
+  const USER_APP = await usersAppDB.updateOne({ hash });
+
+  if(USER_APP.posts.length < OPTION.max_posts){
+    console.log('VALID');
+
+  }
+  else{
+    console.log('NO VALID');
+  }
+
   await usersAppDB.updateOne({ hash }, { $push: { "posts": post_editor } });
   
   try{
