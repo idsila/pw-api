@@ -140,7 +140,7 @@ app.post('/add-post', async (req, res) => {
 
   const USER =  await usersBotDB.findOne({ id });
   const OPTION = LEVEL_SUBSCRIPTION[USER.subscription];
-  const USER_APP = await usersAppDB.updateOne({ hash });
+  const USER_APP = await usersAppDB.findOne({ hash });
 
   if(USER_APP.posts.length < OPTION.max_posts){
     console.log('VALID');
