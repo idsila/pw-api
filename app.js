@@ -96,7 +96,7 @@ app.post('/auth/login', async (req, res) => {
   const { id, username, initData } = req.body;
   const user =  await usersBotDB.findOne({ id, username });
   const isVerify = true; //await verifyTelegramInitData(initData);
-  //console.log(isVerify);
+  console.log(isVerify);
 
 
   if(user === null || user.isBanned || !user.isValid || !isVerify || !user.subscription || !user.activation_sub){
