@@ -143,31 +143,33 @@ app.post('/add-post', async (req, res) => {
   const USER_APP = await usersAppDB.findOne({ hash });
 
   if(USER_APP.posts.length < OPTION.max_posts){
+    await usersAppDB.updateOne({ hash }, { $push: { "posts": post_editor } });
+  
+     try{
+      const URL_MY_LOGIN = await serversDB.findOne({ id_server });
+      await axios.post(`${URL_MY_LOGIN.url}/api/add-post`,  { post_editor, hash }, { headers: { "Content-Type": "application/json" } });
+    
+      const answer = await sendToTelegram(id, post_editor.post_text, post_editor.post_image);
+      if(answer.data.type == 500){
+        await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
+      }
+    }
+    catch(e){
+      //await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
+    }
+
+    const { posts } =  await usersAppDB.findOne({ hash });
+    res.json({ posts });
     console.log('VALID');
 
   }
   else{
+    const { posts } =  await usersAppDB.findOne({ hash });
+    res.json({ posts });
     console.log('NO VALID');
   }
 
-  await usersAppDB.updateOne({ hash }, { $push: { "posts": post_editor } });
   
-  try{
-    const URL_MY_LOGIN = await serversDB.findOne({ id_server });
-    await axios.post(`${URL_MY_LOGIN.url}/api/add-post`,  { post_editor, hash }, { headers: { "Content-Type": "application/json" } });
-    
-    const answer = await sendToTelegram(id, post_editor.post_text, post_editor.post_image);
-    if(answer.data.type == 500){
-      await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
-    }
-  }
-  catch(e){
-    //await sendToTelegram(id, "<blockquote><b>Ошибка:</b> Cкорее всего вы не закрыли тег html</blockquote>");
-  }
-
-  const { posts } =  await usersAppDB.findOne({ hash });
-  //console.log( posts );
-  res.json({ posts });
 });
 
 app.post('/update-post', async (req, res) => { 
