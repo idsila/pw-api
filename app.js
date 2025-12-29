@@ -254,7 +254,6 @@ app.post('/api/restore-user', async (req, res) => {
   CURRENT_USER.forEach( async (user) => {
     const URL_MY_LOGIN = await serversDB.findOne({ id_server: user.id_server });
     axios.post(`${URL_MY_LOGIN.url}/api/restore-user`,  { hash: user.hash }, { headers: { "Content-Type": "application/json" } });
-
   });
 
   res.json({ type: 200 });
