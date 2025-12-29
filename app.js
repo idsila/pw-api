@@ -6,7 +6,6 @@ const cors = require("cors");
 const app = express();
 const HTMLParser  = require('node-html-parser');
 const DB = require("./connectDB.js");
-const { coreObjects } = require("telegram/tl/core/index.js");
 
 
 const usersBotDB = DB.connect("pw_bot");
@@ -226,6 +225,41 @@ app.post("/api/parse", async (req, res) => {
     });
   })
 });
+
+
+app.post('/api/suspend-user', async (req, res) => {
+  const { id } = req.body;
+
+  await usersAppDB.update({ id }, { $set: { isFrozen: true } });
+
+  const CURRENT_USER = await usersAppDB.find({ id }).toArray();
+
+  CURRENT_USER.forEach( async (user) => {
+    const URL_MY_LOGIN = await serversDB.findOne({ id_server: user.id_server });
+    axios.post(`${URL_MY_LOGIN.url}/api/suspend-user`,  { hash: user.hash }, { headers: { "Content-Type": "application/json" } });
+
+  });
+
+  res.json({ type: 200 });
+});
+
+
+app.post('/api/restore-user', async (req, res) => {
+  const { id } = req.body;
+
+  await usersAppDB.update({ id }, { $set: { isFrozen: false } });
+
+  const CURRENT_USER = await usersAppDB.find({ id }).toArray();
+
+  CURRENT_USER.forEach( async (user) => {
+    const URL_MY_LOGIN = await serversDB.findOne({ id_server: user.id_server });
+    axios.post(`${URL_MY_LOGIN.url}/api/restore-user`,  { hash: user.hash }, { headers: { "Content-Type": "application/json" } });
+
+  });
+
+  res.json({ type: 200 });
+});
+
 
 
 
