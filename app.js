@@ -230,7 +230,7 @@ app.post("/api/parse", async (req, res) => {
 app.post('/api/suspend-user', async (req, res) => {
   const { id } = req.body;
 
-  await usersAppDB.update({ id }, { $set: { isFrozen: true } });
+  await usersAppDB.updateMany({ id }, { $set: { isFrozen: true } });
 
   const CURRENT_USER = await usersAppDB.find({ id }).toArray();
 
@@ -247,7 +247,7 @@ app.post('/api/suspend-user', async (req, res) => {
 app.post('/api/restore-user', async (req, res) => {
   const { id } = req.body;
 
-  await usersAppDB.update({ id }, { $set: { isFrozen: false } });
+  await usersAppDB.updateMany({ id }, { $set: { isFrozen: false } });
 
   const CURRENT_USER = await usersAppDB.find({ id }).toArray();
 
